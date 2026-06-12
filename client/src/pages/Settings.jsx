@@ -157,11 +157,13 @@ export default function Settings() {
                     >
                       {testing ? 'Sending…' : '📨 Send test message'}
                     </button>
-                    {testResult && (
+                    {testResult ? (
                       <span className={testResult.ok ? 'pos' : 'neg'}>
                         {testResult.ok ? '✅ ' : '❌ '}
                         {testResult.message}
                       </span>
+                    ) : (
+                      <span className="field-hint">Uses the saved URL — save first.</span>
                     )}
                   </span>
                 )}
