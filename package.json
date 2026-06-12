@@ -1,0 +1,17 @@
+{
+  "name": "thomas-tradingcard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Card shop in your pocket: inventory, pricing, P&L, and restock alerts for trading card vendors",
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "build": "npm run build --prefix client",
+    "start": "npm start --prefix server",
+    "seed": "node server/seed.js",
+    "test:e2e": "node scripts/e2e.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
