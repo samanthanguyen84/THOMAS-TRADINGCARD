@@ -10,6 +10,8 @@ const KNOWN_KEYS = [
   'pokemontcg_api_key',
   'bestbuy_api_key',
   'watch_poll_minutes',
+  'anthropic_api_key',
+  'scan_model',
 ];
 
 // GET /api/settings

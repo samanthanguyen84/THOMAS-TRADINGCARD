@@ -2,7 +2,8 @@ import { fmtDate, fmtMoney, txSigned } from '../utils.js';
 
 // Shared transaction table for Sales & Money and Show detail.
 // Rows come from GET /api/transactions (joined card_name / show_name).
-export default function TransactionTable({ transactions, onDelete, showShowColumn = true }) {
+export default function TransactionTable({ transactions, onDelete, onEdit, showShowColumn = true }) {
+  const hasActions = Boolean(onDelete || onEdit);
   return (
     <div className="table-wrap">
       <table className="table">
@@ -16,7 +17,7 @@ export default function TransactionTable({ transactions, onDelete, showShowColum
             <th className="num">Qty</th>
             <th className="num">Unit</th>
             <th className="num">Amount</th>
-            {onDelete && <th />}
+            {hasActions && <th />}
           </tr>
         </thead>
         <tbody>
@@ -36,16 +37,28 @@ export default function TransactionTable({ transactions, onDelete, showShowColum
                 <td className={`num amount ${signed < 0 ? 'neg' : 'pos'}`}>
                   {fmtMoney(signed, { sign: true })}
                 </td>
-                {onDelete && (
-                  <td className="num">
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-danger-ghost"
-                      onClick={() => onDelete(tx)}
-                      title="Delete transaction"
-                    >
-                      Delete
-                    </button>
+                {hasActions && (
+                  <td className="num nowrap">
+                    {onEdit && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        onClick={() => onEdit(tx)}
+                        title="Edit transaction (assign a show, fix details)"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {onDelete && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-danger-ghost"
+                        onClick={() => onDelete(tx)}
+                        title="Delete transaction"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </td>
                 )}
               </tr>

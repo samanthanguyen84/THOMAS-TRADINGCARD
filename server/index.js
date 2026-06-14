@@ -6,7 +6,8 @@ import './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(express.json());
+// Generous limit so a downscaled phone photo (base64) fits for /api/prices/scan.
+app.use(express.json({ limit: '12mb' }));
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

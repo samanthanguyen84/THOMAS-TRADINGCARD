@@ -1,8 +1,22 @@
 import { Router } from 'express';
 import { getSetting } from '../db.js';
 import { searchCards, getCardPrices } from '../services/prices.js';
+import { identifyCard } from '../services/scan.js';
 
 const router = Router();
+
+// Pull the base64 payload + media type out of either a data: URL or explicit fields.
+function parseImage(body) {
+  if (typeof body?.image === 'string') {
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s.exec(body.image.trim());
+    if (match) return { data: match[2], mediaType: match[1] };
+    return { data: body.image.trim(), mediaType: body.media_type || 'image/jpeg' };
+  }
+  if (typeof body?.image_base64 === 'string') {
+    return { data: body.image_base64, mediaType: body.media_type || 'image/jpeg' };
+  }
+  return null;
+}
 
 function sellPercentage() {
   const value = Number(getSetting('sell_percentage'));
@@ -40,6 +54,32 @@ router.get('/search', async (req, res, next) => {
     const result = await searchCards({ q, page, pageSize });
     const pct = sellPercentage();
     res.json({
+      cards: result.cards.map((card) => withSuggested(card, pct)),
+      page: result.page,
+      totalCount: result.totalCount,
+      sell_percentage: pct,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/prices/scan — identify a card from a photo, then price it.
+// Body: { image: "data:image/jpeg;base64,…" } (or { image_base64, media_type }).
+router.post('/scan', async (req, res, next) => {
+  try {
+    const image = parseImage(req.body);
+    if (!image || !image.data) {
+      return res.status(400).json({ error: 'an image is required (data URL or base64)' });
+    }
+    const identified = await identifyCard(image.data, image.mediaType);
+    const pct = sellPercentage();
+    if (!identified.found || !identified.name) {
+      return res.json({ identified, cards: [], page: 1, totalCount: 0, sell_percentage: pct });
+    }
+    const result = await searchCards({ q: identified.name, page: 1, pageSize: 20 });
+    res.json({
+      identified,
       cards: result.cards.map((card) => withSuggested(card, pct)),
       page: result.page,
       totalCount: result.totalCount,

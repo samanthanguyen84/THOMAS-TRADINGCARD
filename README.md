@@ -68,7 +68,7 @@ npm run test:e2e
 ```
 
 This runs the whole app against fake versions of the price and retailer
-services and verifies every feature end to end. You should see `50 passed`.
+services and verifies every feature end to end. You should see `57 passed`.
 
 ## Settings guide
 
@@ -85,7 +85,12 @@ Open the **Settings** page in the app:
   a free key from <https://dev.pokemontcg.io> raises the rate limit a lot.
   Optional but recommended.
 - **Best Buy API key** — required **only** if you want Best Buy restock
-  watches. Free from <https://developer.bestbuy.com>.
+  watches. Free from <https://developer.bestbuy.com>: sign up, create an app to
+  get your key, then paste it here.
+- **Anthropic API key (photo scan)** — powers the **📷 Scan** button on Price
+  Lookup, which reads a card straight from a photo instead of typing the name.
+  Optional. Get a key at <https://console.anthropic.com> (you pay Anthropic per
+  scan — it's a fraction of a cent each). Leave blank to just type card names.
 - **Restock check interval** — how often watches are checked (minutes).
 
 ## How to find SKUs for restock watches
@@ -100,10 +105,13 @@ Open the **Settings** page in the app:
 
 ## Daily workflows
 
-- **At a show, someone asks a price:** Price Lookup → type the card name →
-  read them the gold "Your price" number.
+- **At a show, someone asks a price:** Price Lookup → type the card name (or
+  tap **📷 Scan** and snap a photo of the card) → read them the gold "Your
+  price" number.
 - **Sold a card:** Inventory → find the card → **Sell** → it pre-fills your
   suggested price; pick the show so it counts toward that show's profit.
+- **Forgot to tag a sale to its show?** Sales & Money → **Edit** on that row →
+  pick the show (you can also fix the date, amount, or note) → Save.
 - **Bought a collection:** Price Lookup → search each card → **+ Add** with
   the quantity and what you paid. (Oddball cards with no listing: Inventory →
   "Add card manually".)

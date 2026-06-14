@@ -41,7 +41,14 @@ const FIELDS = [
     label: 'Best Buy API key',
     type: 'text',
     placeholder: 'required for Best Buy watches',
-    help: 'Needed only for Best Buy restock checks. Request a free developer key at developer.bestbuy.com.',
+    help: 'Needed only for Best Buy restock checks. Request a free developer key at developer.bestbuy.com, then paste the key here.',
+  },
+  {
+    key: 'anthropic_api_key',
+    label: 'Anthropic API key (photo scan)',
+    type: 'password',
+    placeholder: 'sk-ant-… (optional)',
+    help: 'Powers the 📷 Scan button on Price Lookup — snap a photo of a card and it finds the price. Get a key at console.anthropic.com. Leave blank if you only want to type card names.',
   },
 ];
 
@@ -91,6 +98,7 @@ export default function Settings() {
         discord_webhook_url: String(form.discord_webhook_url || '').trim(),
         pokemontcg_api_key: String(form.pokemontcg_api_key || '').trim(),
         bestbuy_api_key: String(form.bestbuy_api_key || '').trim(),
+        anthropic_api_key: String(form.anthropic_api_key || '').trim(),
       });
       const next = {};
       for (const f of FIELDS) next[f.key] = updated[f.key] ?? '';

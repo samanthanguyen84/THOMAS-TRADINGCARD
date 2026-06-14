@@ -8,6 +8,32 @@ import Modal from '../components/Modal.jsx';
 
 const PAGE_SIZE = 20;
 
+// Downscale a photo to a JPEG data URL before upload — keeps the payload small
+// (and the vision call fast/cheap) without losing the legibility of the card text.
+function fileToScaledDataUrl(file, maxEdge = 1024, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('That file could not be read as an image.'));
+    };
+    img.src = url;
+  });
+}
+
 // Small "Add to inventory" form, prefilled from a price-search result.
 // POSTs /api/cards with name/set/number/variant/market_price/image/tcg id.
 function AddToInventoryModal({ card, variant, market, suggested, onClose, onAdded }) {
@@ -115,9 +141,40 @@ export default function PriceLookup() {
   const [error, setError] = useState(null);
   const [adding, setAdding] = useState(null); // { card, variant, market, suggested }
   const [notice, setNotice] = useState(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanInfo, setScanInfo] = useState(null); // { kind: 'ok'|'none'|'error', text }
   const noticeTimer = useRef(null);
+  const fileRef = useRef(null);
 
   useEffect(() => () => clearTimeout(noticeTimer.current), []);
+
+  const onPickPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file
+    if (!file) return;
+    setScanning(true);
+    setScanInfo(null);
+    setError(null);
+    try {
+      const image = await fileToScaledDataUrl(file);
+      const data = await api.post('/api/prices/scan', { image });
+      setResult(data);
+      if (data.identified?.found && data.identified.name) {
+        setQ(data.identified.name);
+        setScanInfo({ kind: 'ok', text: `Read as “${data.identified.name}”` });
+      } else {
+        setScanInfo({
+          kind: 'none',
+          text: 'Couldn’t read a card from that photo. Try a clearer, well-lit shot — or type the name.',
+        });
+      }
+      window.scrollTo({ top: 0 });
+    } catch (err) {
+      setScanInfo({ kind: 'error', text: err.message });
+    } finally {
+      setScanning(false);
+    }
+  };
 
   const flashNotice = (msg) => {
     setNotice(msg);
@@ -169,7 +226,41 @@ export default function PriceLookup() {
         <button type="submit" className="btn btn-primary btn-lg" disabled={loading || !q.trim()}>
           {loading ? 'Searching…' : 'Search'}
         </button>
+        <button
+          type="button"
+          className="btn btn-lg"
+          onClick={() => fileRef.current?.click()}
+          disabled={scanning}
+          title="Take or upload a photo of the card"
+        >
+          {scanning ? 'Reading…' : '📷 Scan'}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="visually-hidden"
+          onChange={onPickPhoto}
+        />
       </form>
+
+      {scanInfo && (
+        <div
+          className={`banner ${
+            scanInfo.kind === 'error'
+              ? 'banner-error'
+              : scanInfo.kind === 'none'
+                ? 'banner-info'
+                : 'banner-success'
+          }`}
+        >
+          {scanInfo.kind === 'ok' ? '📷 ' : scanInfo.kind === 'error' ? '⚠️ ' : '🤔 '}
+          {scanInfo.text}
+        </div>
+      )}
+
+      {scanning && <Loading label="Reading the card…" />}
 
       {notice && <div className="banner banner-success">✅ {notice}</div>}
 

@@ -5,6 +5,7 @@ import { fmtMoney, todayISO, txSigned } from '../utils.js';
 import Loading from '../components/Loading.jsx';
 import ErrorBanner from '../components/ErrorBanner.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import Modal from '../components/Modal.jsx';
 import TransactionTable, { confirmDeleteTransaction } from '../components/TransactionTable.jsx';
 
 const TYPE_CHIPS = ['all', 'sale', 'purchase', 'expense', 'adjustment'];
@@ -111,6 +112,91 @@ function AddEntryForm({ shows, onSaved }) {
   );
 }
 
+// Edit an existing transaction — mainly to attach a sale to a show after the
+// fact, but also to fix the description, date, or amount (PATCH /api/transactions/:id).
+function EditTransactionModal({ tx, shows, onClose, onSaved }) {
+  const origDate = String(tx.date || '').slice(0, 10);
+  const [showId, setShowId] = useState(tx.show_id ? String(tx.show_id) : '');
+  const [description, setDescription] = useState(tx.description || '');
+  const [date, setDate] = useState(origDate);
+  const [amount, setAmount] = useState(tx.total != null ? String(tx.total) : '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const total = Number(amount);
+    if (amount === '' || Number.isNaN(total)) {
+      setError(new Error('Enter an amount.'));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const body = {
+        show_id: showId ? Number(showId) : null,
+        description: description.trim(),
+        total,
+      };
+      if (date && date !== origDate) body.date = date;
+      await api.patch(`/api/transactions/${tx.id}`, body);
+      onSaved();
+    } catch (err) {
+      setError(err);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={`Edit ${tx.type}`} onClose={onClose}>
+      <div className="list-sub" style={{ marginBottom: 12 }}>
+        {tx.card_name ? `${tx.card_name} · ` : ''}
+        {fmtMoney(tx.total)} on {String(tx.date || '').slice(0, 10)}
+      </div>
+      <form onSubmit={submit}>
+        <ErrorBanner error={error} />
+        <label className="field field-stack">
+          <span>Show</span>
+          <select value={showId} onChange={(e) => setShowId(e.target.value)} autoFocus>
+            <option value="">No show</option>
+            {shows.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+                {s.date ? ` — ${String(s.date).slice(0, 10)}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="form-grid form-grid-2">
+          <label className="field">
+            <span>Date</span>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Amount ($)</span>
+            <input
+              type="number"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </label>
+        </div>
+        <label className="field field-stack">
+          <span>Description</span>
+          <input value={description} onChange={(e) => setDescription(e.target.value)} />
+        </label>
+        <div className="modal-actions">
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={busy}>
+            {busy ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export default function Sales() {
   const [type, setType] = useState('all');
   const [from, setFrom] = useState('');
@@ -127,6 +213,7 @@ export default function Sales() {
   const shows = showsData.data?.shows || [];
 
   const [actionError, setActionError] = useState(null);
+  const [editing, setEditing] = useState(null);
 
   const transactions = tx.data?.transactions || [];
   const moneyIn = transactions
@@ -223,8 +310,24 @@ export default function Sales() {
               {tx.data.count} transaction{tx.data.count === 1 ? '' : 's'}
             </span>
           </div>
-          <TransactionTable transactions={transactions} onDelete={handleDelete} />
+          <TransactionTable
+            transactions={transactions}
+            onDelete={handleDelete}
+            onEdit={setEditing}
+          />
         </>
+      )}
+
+      {editing && (
+        <EditTransactionModal
+          tx={editing}
+          shows={shows}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            tx.reload();
+          }}
+        />
       )}
     </div>
   );

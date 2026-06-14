@@ -290,6 +290,42 @@ function retailHandler(req, res) {
   jsonOut(res, 404, { error: 'not found' });
 }
 
+// --- Anthropic Messages API mock (vision card scan) ------------------------
+
+// mode: 'found' returns a Charizard identification; 'notfound' returns found:false;
+// 'fail' returns a 500 so the scan route surfaces a 502.
+const anthropicState = { mode: 'found', calls: 0 };
+
+function anthropicHandler(req, res) {
+  if (req.method !== 'POST') return jsonOut(res, 404, { error: 'not found' });
+  let body = '';
+  req.on('data', (chunk) => (body += chunk));
+  req.on('end', () => {
+    anthropicState.calls += 1;
+    if (anthropicState.mode === 'fail') {
+      return jsonOut(res, 500, { type: 'error', error: { type: 'api_error', message: 'mock anthropic down' } });
+    }
+    const card =
+      anthropicState.mode === 'notfound'
+        ? { found: false, name: '', set_name: '', card_number: '' }
+        : { found: true, name: 'Charizard', set_name: 'Base', card_number: '4' };
+    jsonOut(res, 200, {
+      id: 'msg_e2e',
+      type: 'message',
+      role: 'assistant',
+      model: 'claude-opus-4-8',
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      content: [{ type: 'text', text: JSON.stringify(card) }],
+      usage: { input_tokens: 12, output_tokens: 12 },
+    });
+  });
+}
+
+// 1x1 transparent PNG, as a data URL — stand-in for a card photo.
+const SAMPLE_IMAGE =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
 // --- Discord webhook mock ---------------------------------------------------
 
 const discordState = { posts: [] };
@@ -418,9 +454,11 @@ async function main() {
   const tcg = await startMock(tcgHandler);
   const retail = await startMock(retailHandler);
   const discord = await startMock(discordHandler);
+  const anthropic = await startMock(anthropicHandler);
   cleanups.push(() => tcg.server.close());
   cleanups.push(() => retail.server.close());
   cleanups.push(() => discord.server.close());
+  cleanups.push(() => anthropic.server.close());
   const discordWebhookUrl = `${discord.url}/webhooks/1234567890/e2e-test-token`;
 
   mockEnv = {
@@ -428,6 +466,7 @@ async function main() {
     TARGET_BASE_URL: retail.url,
     BESTBUY_BASE_URL: retail.url,
     BN_BASE_URL: retail.url,
+    ANTHROPIC_BASE_URL: anthropic.url,
   };
 
   // Real server (watcher disabled; the loop gets its own dedicated sub-test)
@@ -470,6 +509,102 @@ async function main() {
     assert.deepEqual(r.data, { ok: true });
     assert.equal(discordState.posts.length, before + 1, 'exactly one webhook POST');
     assert.match(discordState.posts.at(-1).content, /test/i);
+  });
+
+  // ------------------------------------------- photo scan (Claude vision)
+
+  await test('POST /api/prices/scan without an API key returns 400', async () => {
+    const r = await api('POST', '/api/prices/scan', { image: SAMPLE_IMAGE });
+    assert.equal(r.status, 400);
+    assert.match(r.data.error, /api key/i);
+  });
+
+  await test('POST /api/prices/scan with no image returns 400', async () => {
+    await api('PUT', '/api/settings', { anthropic_api_key: 'sk-ant-test' });
+    const r = await api('POST', '/api/prices/scan', {});
+    assert.equal(r.status, 400);
+    assert.match(r.data.error, /image/i);
+  });
+
+  await test('POST /api/prices/scan identifies a card and prices it', async () => {
+    anthropicState.mode = 'found';
+    const before = anthropicState.calls;
+    const r = await api('POST', '/api/prices/scan', { image: SAMPLE_IMAGE });
+    assert.equal(r.status, 200);
+    assert.equal(anthropicState.calls, before + 1, 'vision API called exactly once');
+    assert.equal(r.data.identified.found, true);
+    assert.equal(r.data.identified.name, 'Charizard');
+    assert.equal(r.data.sell_percentage, 80);
+    assert.ok(r.data.cards.length >= 1, 'identified card was priced');
+    const card = r.data.cards.find((c) => c.tcg_card_id === 'base1-4');
+    assert.ok(card, 'base1-4 in scan results');
+    approx(card.suggested.holofoil, 176.4, 'scan result carries suggested price');
+  });
+
+  await test('POST /api/prices/scan returns no cards when nothing is recognized', async () => {
+    anthropicState.mode = 'notfound';
+    const r = await api('POST', '/api/prices/scan', { image: SAMPLE_IMAGE });
+    assert.equal(r.status, 200);
+    assert.equal(r.data.identified.found, false);
+    assert.deepEqual(r.data.cards, []);
+    anthropicState.mode = 'found';
+  });
+
+  await test('POST /api/prices/scan returns 502 when the vision API fails', async () => {
+    anthropicState.mode = 'fail';
+    const r = await api('POST', '/api/prices/scan', { image: SAMPLE_IMAGE });
+    assert.equal(r.status, 502);
+    assert.ok(r.data.error, 'JSON error body on vision failure');
+    anthropicState.mode = 'found';
+    await api('PUT', '/api/settings', { anthropic_api_key: '' });
+  });
+
+  // ------------------------------------------- transaction edit (assign show)
+
+  await test('PATCH /api/transactions/:id assigns a sale to a show', async () => {
+    const show = await api('POST', '/api/shows', { name: 'Edit-Test Show' });
+    const showId = show.data.id;
+    const created = await api('POST', '/api/transactions', {
+      type: 'expense',
+      total: 12.5,
+      description: 'gas',
+    });
+    const txId = created.data.id;
+    assert.equal(created.data.show_id, null);
+
+    const patched = await api('PATCH', `/api/transactions/${txId}`, {
+      show_id: showId,
+      description: 'gas to show',
+    });
+    assert.equal(patched.status, 200);
+    assert.equal(patched.data.show_id, showId);
+    assert.equal(patched.data.show_name, 'Edit-Test Show');
+    assert.equal(patched.data.description, 'gas to show');
+    assert.equal(patched.data.total, 12.5, 'untouched fields preserved');
+
+    // Clearing the show with null detaches it again.
+    const cleared = await api('PATCH', `/api/transactions/${txId}`, { show_id: null });
+    assert.equal(cleared.status, 200);
+    assert.equal(cleared.data.show_id, null);
+    assert.equal(cleared.data.show_name, null);
+
+    // Clean up so later exact-total assertions see an unperturbed DB.
+    await api('DELETE', `/api/transactions/${txId}`);
+    await api('DELETE', `/api/shows/${showId}`);
+  });
+
+  await test('PATCH /api/transactions/:id rejects bad input', async () => {
+    const created = await api('POST', '/api/transactions', { type: 'expense', total: 5 });
+    const txId = created.data.id;
+    const unknown = await api('PATCH', `/api/transactions/${txId}`, { type: 'sale' });
+    assert.equal(unknown.status, 400);
+    const empty = await api('PATCH', `/api/transactions/${txId}`, {});
+    assert.equal(empty.status, 400);
+    const badShow = await api('PATCH', `/api/transactions/${txId}`, { show_id: 999999 });
+    assert.equal(badShow.status, 400);
+    const missing = await api('PATCH', '/api/transactions/999999', { description: 'x' });
+    assert.equal(missing.status, 404);
+    await api('DELETE', `/api/transactions/${txId}`);
   });
 
   // ------------------------------------------- Flow 1: full vendor flow

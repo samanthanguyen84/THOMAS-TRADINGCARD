@@ -98,6 +98,8 @@ const DEFAULT_SETTINGS = {
   pokemontcg_api_key: '',
   bestbuy_api_key: '',
   watch_poll_minutes: '5',
+  anthropic_api_key: '',
+  scan_model: 'claude-opus-4-8',
 };
 
 const insertDefault = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');

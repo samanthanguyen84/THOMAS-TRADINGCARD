@@ -115,6 +115,16 @@ show_id?, quantity?, unit_price?, date? }`. For manual entries — table fees,
 gas, food, cash adjustments. Does **not** touch card quantities. Returns 201
 with the transaction.
 
+### `PATCH /api/transactions/:id`
+Edit an existing transaction without touching inventory. Accepts any subset of
+`show_id` (integer to assign, `null`/`""` to clear — 400 if the show doesn't
+exist), `description`, `date` (non-empty), `unit_price` (≥ 0), and `total`
+(≥ 0 unless the transaction is an `adjustment`). 400 on any other field or an
+empty body, 404 if the transaction doesn't exist. Returns the updated
+transaction joined with `card_name`/`show_name`. The primary use is attaching a
+sale to a show after the fact. `type`, `card_id`, and `quantity` are not
+editable (they have inventory implications — delete and re-create instead).
+
 ### `DELETE /api/transactions/:id`
 Undo. If the transaction is linked to an existing card: a deleted `sale`
 returns its quantity to inventory; a deleted `purchase` removes the quantity
@@ -180,7 +190,9 @@ cost_basis` (current cost basis; null card_id sales excluded).
 ## Settings — `server/routes/settings.js`
 
 Keys (all values stored as strings): `sell_percentage`, `discord_webhook_url`,
-`pokemontcg_api_key`, `bestbuy_api_key`, `watch_poll_minutes`.
+`pokemontcg_api_key`, `bestbuy_api_key`, `watch_poll_minutes`,
+`anthropic_api_key` (powers the photo-scan feature), `scan_model` (Claude model
+id used for the scan, default `claude-opus-4-8`).
 
 ### `GET /api/settings` → flat object of all keys.
 ### `PUT /api/settings`
@@ -229,6 +241,21 @@ page, totalCount, sell_percentage }` (pct from settings at request time).
 ### `GET /api/prices/card/:tcgCardId`
 Single card, same normalized shape + `suggested` + `sell_percentage`.
 404 if upstream says not found, 502 on upstream failure.
+
+### `POST /api/prices/scan`
+Identify a card from a photo, then price it. Body: `{ image }` where `image` is
+a data URL (`data:image/jpeg;base64,…`) or raw base64 (with optional
+`media_type`). Backed by `server/services/scan.js`, which calls Claude's vision
+API (`@anthropic-ai/sdk`) using the `anthropic_api_key` and `scan_model`
+settings; the base URL is overridable via env `ANTHROPIC_BASE_URL` for tests.
+The model returns `{ found, name, set_name, card_number }` (structured output);
+when `found` and a `name` are present, the route runs `searchCards(name)` and
+returns `{ identified, cards: [normalized + suggested], page, totalCount,
+sell_percentage }` (same card shape as `/search`). When nothing is recognized
+it returns the same shape with `cards: []`. 400 if no image is supplied or no
+Anthropic key is configured; 502 on a vision-API failure or a rejected key.
+Clients should downscale photos before upload (the server accepts up to a 12 MB
+JSON body).
 
 ---
 
