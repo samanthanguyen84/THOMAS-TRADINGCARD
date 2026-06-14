@@ -24,13 +24,35 @@ back in stock at Target, Best Buy, or Barnes & Noble.
 ## Quick start
 
 You need [Node.js 18 or newer](https://nodejs.org) installed. Then, in this
-folder:
+folder, run these **one at a time** (copy a single line, press Enter, wait for
+it to finish, then do the next):
 
 ```bash
-npm run setup     # one time: installs everything
-npm run seed      # optional: loads demo data so you can poke around
-npm run build     # builds the app for daily use
-npm start         # runs it
+npm run setup
+```
+
+```bash
+npm run build
+```
+
+```bash
+npm start
+```
+
+`npm run setup` is a one-time install (a few minutes). `npm run build` packages
+the app, and `npm start` runs it.
+
+> **Copy one line at a time, and don't paste the explanation text after a
+> command.** Some terminals (zsh on Mac) treat the `#` in a trailing comment as
+> part of the command and throw confusing errors like
+> `Invalid tag name "#"`. Every command in this README is meant to be run on
+> its own.
+
+Optional: to load demo data so you can poke around before entering your real
+cards, run this once before `npm start`:
+
+```bash
+npm run seed
 ```
 
 Now open **http://localhost:3001** in your browser. That's it. Leave
@@ -118,6 +140,26 @@ watch to test it immediately.
 - **Page won't load:** make sure `npm start` is still running and you're on
   <http://localhost:3001>. If you just pulled new code, run `npm run build`
   again first.
+- **`sh: vite: command not found` when building:** the install didn't finish
+  (this usually happens when a command got pasted with its `#` comment and the
+  install errored out partway). Just re-run the installer, then build again:
+
+  ```bash
+  npm run setup
+  ```
+
+  ```bash
+  npm run build
+  ```
+
+- **`Invalid tag name "#"` or `unknown file attribute`:** your terminal swallowed
+  a `#`-comment as part of the command. Re-run the bare command on its own line
+  with nothing after it.
+- **"critical/high severity vulnerabilities" after install:** these come from
+  the development build tools (the dev launcher and Vite/esbuild), not from the
+  running app or your data. They're safe to ignore. Do **not** run
+  `npm audit fix --force` — it can upgrade the build tools to incompatible
+  versions and break `npm run build`.
 - **Want to verify the whole thing after a change:** `npm run test:e2e`.
 
 ## For the technically curious
