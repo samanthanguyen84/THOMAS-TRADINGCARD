@@ -206,6 +206,14 @@ full updated settings object.
 Sends a test message via `sendDiscordMessage` from `../services/discord.js`
 using the stored webhook URL. Returns `{ ok: true }` or 502 + `{ error }`.
 
+### `POST /api/settings/test-scan`
+Validates the configured photo-scan key with a tiny call (Gemini if
+`gemini_api_key` is set, else Anthropic). Returns `{ ok: true, provider }`, 400
+if no key is set, or 502 + `{ error }` carrying the **provider's real error
+message** (e.g. Google's "API key not valid…") so the user can see exactly why a
+key was rejected. Backed by `testScanProvider()` in `../services/scan.js`; scan
+failures on `POST /api/prices/scan` surface the same provider message.
+
 ---
 
 ## Prices — `server/routes/prices.js` + `server/services/prices.js`

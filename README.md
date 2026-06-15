@@ -89,8 +89,15 @@ Open the **Settings** page in the app:
   get your key, then paste it here.
 - **Google Gemini API key (photo scan — FREE)** — powers the **📷 Scan** button
   on Price Lookup, which reads a card straight from a photo instead of typing.
-  Free: get a key at <https://aistudio.google.com> (no credit card; ~1,500 scans
-  a day). Optional — leave blank to just type card names.
+  Free: at <https://aistudio.google.com/app/apikey> click **Create API key** (the
+  key starts with `AIza…`; no credit card; ~1,500 scans a day). Paste it here,
+  Save, then click **🔑 Test scan key** to confirm it works. Optional — leave
+  blank to just type card names.
+  - **If the test says the key is rejected:** the message now shows Google's
+    exact reason. Usual fixes: make sure you copied the whole `AIza…` key with no
+    spaces; in AI Studio add a restriction → **Restrict to Gemini API** (Google
+    rejects *unrestricted* keys after June 19, 2026); and if it mentions the API
+    being disabled, enable the "Generative Language API" for that project.
 - **Anthropic API key (photo scan — paid alternative)** — an optional paid
   stand-in for Gemini (slightly better accuracy). Only used if no Gemini key is
   set. Key from <https://console.anthropic.com>.

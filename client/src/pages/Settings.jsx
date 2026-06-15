@@ -67,6 +67,8 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null); // { ok, message }
+  const [testingScan, setTestingScan] = useState(false);
+  const [scanResult, setScanResult] = useState(null); // { ok, message }
   const savedTimer = useRef(null);
 
   useEffect(() => {
@@ -134,6 +136,19 @@ export default function Settings() {
     }
   };
 
+  const testScan = async () => {
+    setTestingScan(true);
+    setScanResult(null);
+    try {
+      const r = await api.post('/api/settings/test-scan');
+      setScanResult({ ok: true, message: `${r.provider || 'Scanner'} key works — you're all set!` });
+    } catch (err) {
+      setScanResult({ ok: false, message: err.message });
+    } finally {
+      setTestingScan(false);
+    }
+  };
+
   return (
     <div className="page page-narrow">
       <div className="page-head">
@@ -180,6 +195,26 @@ export default function Settings() {
                       </span>
                     ) : (
                       <span className="field-hint">Uses the saved URL — save first.</span>
+                    )}
+                  </span>
+                )}
+                {field.key === 'gemini_api_key' && (
+                  <span className="test-row">
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={testScan}
+                      disabled={testingScan}
+                    >
+                      {testingScan ? 'Testing…' : '🔑 Test scan key'}
+                    </button>
+                    {scanResult ? (
+                      <span className={scanResult.ok ? 'pos' : 'neg'}>
+                        {scanResult.ok ? '✅ ' : '❌ '}
+                        {scanResult.message}
+                      </span>
+                    ) : (
+                      <span className="field-hint">Save first, then test the key you entered.</span>
                     )}
                   </span>
                 )}

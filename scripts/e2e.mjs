@@ -342,6 +342,11 @@ function geminiHandler(req, res) {
     if (geminiState.mode === 'fail') {
       return jsonOut(res, 500, { error: { code: 500, message: 'mock gemini down' } });
     }
+    if (geminiState.mode === 'badkey') {
+      return jsonOut(res, 400, {
+        error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT' },
+      });
+    }
     const card = { found: true, name: 'Pikachu', set_name: 'Base', card_number: '58' };
     jsonOut(res, 200, {
       candidates: [{ content: { role: 'model', parts: [{ text: JSON.stringify(card) }] } }],
@@ -594,6 +599,41 @@ async function main() {
     assert.equal(geminiState.calls, before + 1, 'Gemini called exactly once');
     assert.equal(r.data.identified.name, 'Pikachu');
     assert.ok(r.data.cards.length >= 1, 'Gemini-identified card was priced');
+    await api('PUT', '/api/settings', { gemini_api_key: '' });
+  });
+
+  await test('POST /api/settings/test-scan validates a working Gemini key', async () => {
+    await api('PUT', '/api/settings', { gemini_api_key: 'AIza-test' });
+    geminiState.mode = 'found';
+    const r = await api('POST', '/api/settings/test-scan');
+    assert.equal(r.status, 200);
+    assert.equal(r.data.ok, true);
+    assert.match(r.data.provider, /gemini/i);
+    await api('PUT', '/api/settings', { gemini_api_key: '' });
+  });
+
+  await test('POST /api/settings/test-scan surfaces Google’s real error for a bad key', async () => {
+    await api('PUT', '/api/settings', { gemini_api_key: 'AIza-bad' });
+    geminiState.mode = 'badkey';
+    const r = await api('POST', '/api/settings/test-scan');
+    assert.equal(r.status, 502);
+    assert.match(r.data.error, /API key not valid/i);
+    geminiState.mode = 'found';
+    await api('PUT', '/api/settings', { gemini_api_key: '' });
+  });
+
+  await test('POST /api/settings/test-scan with no key configured returns 400', async () => {
+    const r = await api('POST', '/api/settings/test-scan');
+    assert.equal(r.status, 400);
+  });
+
+  await test('POST /api/prices/scan surfaces the real provider error on a bad key', async () => {
+    await api('PUT', '/api/settings', { gemini_api_key: 'AIza-bad' });
+    geminiState.mode = 'badkey';
+    const r = await api('POST', '/api/prices/scan', { image: SAMPLE_IMAGE });
+    assert.equal(r.status, 502);
+    assert.match(r.data.error, /API key not valid/i);
+    geminiState.mode = 'found';
     await api('PUT', '/api/settings', { gemini_api_key: '' });
   });
 

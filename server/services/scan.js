@@ -40,36 +40,24 @@ function normalize(parsed) {
 
 // --- Google Gemini (free tier) ---------------------------------------------
 
-async function identifyWithGemini(apiKey, imageBase64, media) {
+function geminiModel() {
+  return getSetting('scan_model_gemini') || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+}
+
+// Low-level call. `parts` is the user-content parts array; `schema` (optional)
+// turns on JSON-constrained output. Returns the concatenated text. Throws a
+// scanError that surfaces Google's actual error message on any failure.
+async function geminiGenerate(apiKey, parts, schema) {
   const base = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com';
-  const model = getSetting('scan_model_gemini') || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const url = `${base}/v1beta/models/${encodeURIComponent(geminiModel())}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   const body = {
     systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          { inline_data: { mime_type: media, data: imageBase64 } },
-          { text: USER_PROMPT },
-        ],
-      },
-    ],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'OBJECT',
-        properties: {
-          found: { type: 'BOOLEAN' },
-          name: { type: 'STRING' },
-          set_name: { type: 'STRING' },
-          card_number: { type: 'STRING' },
-        },
-        required: ['found', 'name', 'set_name', 'card_number'],
-      },
-    },
+    contents: [{ role: 'user', parts }],
   };
+  if (schema) {
+    body.generationConfig = { responseMimeType: 'application/json', responseSchema: schema };
+  }
 
   let res;
   try {
@@ -80,21 +68,44 @@ async function identifyWithGemini(apiKey, imageBase64, media) {
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
-    throw scanError(`Card scan failed: ${err.message || 'could not reach Google'}`, 502);
+    throw scanError(`Couldn’t reach Google: ${err.message || 'network error'}`, 502);
   }
-  if (res.status === 400 || res.status === 403) {
-    throw scanError('Google Gemini key was rejected — check it in Settings.', 502);
-  }
-  if (!res.ok) {
-    throw scanError(`Card scan failed: Gemini returned ${res.status}.`, 502);
-  }
-  let data;
+
+  let data = null;
   try {
     data = await res.json();
   } catch {
+    data = null;
+  }
+
+  if (!res.ok) {
+    // Surface Google's real reason instead of a vague "key rejected".
+    const detail = data?.error?.message || `Gemini returned HTTP ${res.status}`;
+    throw scanError(`Google rejected the request: ${detail}`, 502);
+  }
+  if (!data) {
     throw scanError('The scanner returned an unreadable result. Try again.', 502);
   }
-  const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '';
+  return data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '';
+}
+
+const GEMINI_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    found: { type: 'BOOLEAN' },
+    name: { type: 'STRING' },
+    set_name: { type: 'STRING' },
+    card_number: { type: 'STRING' },
+  },
+  required: ['found', 'name', 'set_name', 'card_number'],
+};
+
+async function identifyWithGemini(apiKey, imageBase64, media) {
+  const text = await geminiGenerate(
+    apiKey,
+    [{ inline_data: { mime_type: media, data: imageBase64 } }, { text: USER_PROMPT }],
+    GEMINI_SCHEMA
+  );
   let parsed;
   try {
     parsed = JSON.parse(text);
@@ -118,7 +129,7 @@ const CARD_SCHEMA = {
   required: ['found', 'name', 'set_name', 'card_number'],
 };
 
-async function identifyWithAnthropic(apiKey, imageBase64, media) {
+async function anthropicClient(apiKey) {
   let Anthropic;
   try {
     ({ default: Anthropic } = await import('@anthropic-ai/sdk'));
@@ -128,13 +139,17 @@ async function identifyWithAnthropic(apiKey, imageBase64, media) {
       502
     );
   }
-  const model = getSetting('scan_model') || 'claude-opus-4-8';
-  const client = new Anthropic({
+  return new Anthropic({
     apiKey,
     baseURL: process.env.ANTHROPIC_BASE_URL || undefined,
     timeout: 30_000,
     maxRetries: 1,
   });
+}
+
+async function identifyWithAnthropic(apiKey, imageBase64, media) {
+  const model = getSetting('scan_model') || 'claude-opus-4-8';
+  const client = await anthropicClient(apiKey);
 
   let response;
   try {
@@ -198,4 +213,30 @@ export async function identifyCard(imageBase64, mediaType) {
       '(get one at aistudio.google.com — no credit card).',
     400
   );
+}
+
+// Validate the configured scan key with a tiny call, so the user can confirm it
+// works before relying on it. Returns { ok, provider }; throws scanError with
+// the provider's real error message on failure.
+export async function testScanProvider() {
+  const geminiKey = getSetting('gemini_api_key');
+  if (geminiKey) {
+    await geminiGenerate(geminiKey, [{ text: 'Reply with the single word OK.' }], null);
+    return { ok: true, provider: 'Google Gemini' };
+  }
+  const anthropicKey = getSetting('anthropic_api_key');
+  if (anthropicKey) {
+    const client = await anthropicClient(anthropicKey);
+    try {
+      await client.messages.create({
+        model: getSetting('scan_model') || 'claude-opus-4-8',
+        max_tokens: 8,
+        messages: [{ role: 'user', content: 'Reply with the single word OK.' }],
+      });
+    } catch (err) {
+      throw scanError(`Anthropic key check failed: ${err.message || 'request failed'}`, 502);
+    }
+    return { ok: true, provider: 'Anthropic Claude' };
+  }
+  throw scanError('Add a Google Gemini API key first, then test it.', 400);
 }

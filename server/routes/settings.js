@@ -1,6 +1,7 @@
 import express from 'express';
 import { getSetting, getAllSettings, setSettings } from '../db.js';
 import { sendDiscordMessage } from '../services/discord.js';
+import { testScanProvider } from '../services/scan.js';
 
 const router = express.Router();
 
@@ -59,6 +60,16 @@ router.post('/test-discord', async (req, res) => {
   );
   if (result.ok) return res.json({ ok: true });
   res.status(502).json({ error: result.error || 'failed to send Discord message' });
+});
+
+// POST /api/settings/test-scan — validate the configured photo-scan API key.
+router.post('/test-scan', async (req, res, next) => {
+  try {
+    const result = await testScanProvider();
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;
