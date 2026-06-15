@@ -6,7 +6,10 @@
 //   - Google Gemini (free tier — recommended; no per-scan cost)
 //   - Anthropic Claude (paid; better accuracy)
 // Gemini wins when both are configured. Base URLs are env-overridable for tests.
-import Anthropic from '@anthropic-ai/sdk';
+//
+// The Anthropic SDK is imported lazily (only when the Anthropic path runs), so a
+// missing/uninstalled SDK can never stop this module — and therefore the whole
+// price router — from loading. Gemini uses plain fetch and needs no dependency.
 import { getSetting } from '../db.js';
 
 const SUPPORTED_MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -116,6 +119,15 @@ const CARD_SCHEMA = {
 };
 
 async function identifyWithAnthropic(apiKey, imageBase64, media) {
+  let Anthropic;
+  try {
+    ({ default: Anthropic } = await import('@anthropic-ai/sdk'));
+  } catch {
+    throw scanError(
+      'The Anthropic library isn’t installed — use the free Google Gemini option in Settings instead (or run “npm run setup”).',
+      502
+    );
+  }
   const model = getSetting('scan_model') || 'claude-opus-4-8';
   const client = new Anthropic({
     apiKey,

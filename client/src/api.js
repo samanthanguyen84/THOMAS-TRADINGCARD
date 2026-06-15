@@ -29,8 +29,15 @@ async function request(path, { method = 'GET', body } = {}) {
   }
 
   if (!res.ok) {
-    const message =
+    let message =
       (data && data.error) || `Request failed (${res.status} ${res.statusText})`;
+    // A 404 with no JSON body on an API route means the running server doesn't
+    // have that endpoint — almost always an out-of-date server that needs a
+    // restart after pulling new code.
+    if (res.status === 404 && !data && path.startsWith('/api/')) {
+      message =
+        'That feature isn’t on the running server (404). Your server is likely running older code — stop it (Ctrl+C) and run “npm start” again.';
+    }
     const err = new Error(message);
     err.status = res.status;
     err.data = data;
