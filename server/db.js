@@ -100,6 +100,7 @@ const DEFAULT_SETTINGS = {
   watch_poll_minutes: '5',
   anthropic_api_key: '',
   scan_model: 'claude-opus-4-8',
+  gemini_api_key: '',
 };
 
 const insertDefault = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');

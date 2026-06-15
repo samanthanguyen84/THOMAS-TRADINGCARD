@@ -44,11 +44,18 @@ const FIELDS = [
     help: 'Needed only for Best Buy restock checks. Request a free developer key at developer.bestbuy.com, then paste the key here.',
   },
   {
+    key: 'gemini_api_key',
+    label: 'Google Gemini API key (photo scan — FREE)',
+    type: 'password',
+    placeholder: 'AIza… (free, optional)',
+    help: 'Powers the 📷 Scan button on Price Lookup — snap a photo of a card and it finds the price. FREE: get a key at aistudio.google.com (no credit card, ~1,500 scans/day). Leave blank to just type card names.',
+  },
+  {
     key: 'anthropic_api_key',
-    label: 'Anthropic API key (photo scan)',
+    label: 'Anthropic API key (photo scan — paid alternative)',
     type: 'password',
     placeholder: 'sk-ant-… (optional)',
-    help: 'Powers the 📷 Scan button on Price Lookup — snap a photo of a card and it finds the price. Get a key at console.anthropic.com. Leave blank if you only want to type card names.',
+    help: 'An optional paid alternative to Gemini for the photo scan (slightly better accuracy). Only used if no Gemini key is set. Get one at console.anthropic.com.',
   },
 ];
 
@@ -98,6 +105,7 @@ export default function Settings() {
         discord_webhook_url: String(form.discord_webhook_url || '').trim(),
         pokemontcg_api_key: String(form.pokemontcg_api_key || '').trim(),
         bestbuy_api_key: String(form.bestbuy_api_key || '').trim(),
+        gemini_api_key: String(form.gemini_api_key || '').trim(),
         anthropic_api_key: String(form.anthropic_api_key || '').trim(),
       });
       const next = {};

@@ -68,7 +68,7 @@ npm run test:e2e
 ```
 
 This runs the whole app against fake versions of the price and retailer
-services and verifies every feature end to end. You should see `57 passed`.
+services and verifies every feature end to end. You should see `60 passed`.
 
 ## Settings guide
 
@@ -87,10 +87,13 @@ Open the **Settings** page in the app:
 - **Best Buy API key** — required **only** if you want Best Buy restock
   watches. Free from <https://developer.bestbuy.com>: sign up, create an app to
   get your key, then paste it here.
-- **Anthropic API key (photo scan)** — powers the **📷 Scan** button on Price
-  Lookup, which reads a card straight from a photo instead of typing the name.
-  Optional. Get a key at <https://console.anthropic.com> (you pay Anthropic per
-  scan — it's a fraction of a cent each). Leave blank to just type card names.
+- **Google Gemini API key (photo scan — FREE)** — powers the **📷 Scan** button
+  on Price Lookup, which reads a card straight from a photo instead of typing.
+  Free: get a key at <https://aistudio.google.com> (no credit card; ~1,500 scans
+  a day). Optional — leave blank to just type card names.
+- **Anthropic API key (photo scan — paid alternative)** — an optional paid
+  stand-in for Gemini (slightly better accuracy). Only used if no Gemini key is
+  set. Key from <https://console.anthropic.com>.
 - **Restock check interval** — how often watches are checked (minutes).
 
 ## How to find SKUs for restock watches
@@ -136,9 +139,12 @@ watch to test it immediately.
 
 ## Troubleshooting
 
-- **Price lookup says "service unavailable" (502):** the Pokémon TCG API is
-  down or you're being rate limited. Wait a minute and retry; add a free API
-  key in Settings to get much higher limits.
+- **Price lookup says "service unavailable" (502) or times out:** the Pokémon
+  TCG API itself is slow or down (it's mid-migration to a service called
+  Scrydex and has been flaky) — this is the data source, not the app. The app
+  retries once automatically; wait a minute and hit **Retry**. Adding the free
+  Pokémon TCG API key in Settings also helps. Note you can search by name *and*
+  number, e.g. `pikachu 051/162`, to land on the exact card.
 - **Best Buy watch shows "Error":** you almost certainly haven't added a Best
   Buy API key in Settings — it's required for Best Buy (and only Best Buy).
 - **No restock alerts arriving:** the watcher only runs while the app is

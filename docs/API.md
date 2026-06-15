@@ -191,8 +191,10 @@ cost_basis` (current cost basis; null card_id sales excluded).
 
 Keys (all values stored as strings): `sell_percentage`, `discord_webhook_url`,
 `pokemontcg_api_key`, `bestbuy_api_key`, `watch_poll_minutes`,
-`anthropic_api_key` (powers the photo-scan feature), `scan_model` (Claude model
-id used for the scan, default `claude-opus-4-8`).
+`gemini_api_key` (free Google Gemini key — preferred photo-scan provider),
+`anthropic_api_key` (paid photo-scan fallback), `scan_model` (Claude model id,
+default `claude-opus-4-8`), `scan_model_gemini` (Gemini model id, default
+`gemini-2.5-flash`).
 
 ### `GET /api/settings` → flat object of all keys.
 ### `PUT /api/settings`
@@ -233,10 +235,16 @@ Normalized card shape (built from pokemontcg.io `card` objects):
 `prices` comes from `card.tcgplayer.prices` (may be `{}` if absent).
 
 ### `GET /api/prices/search?q=&page=&pageSize=`
-400 if `q` empty. Upstream query: `name:"*<q>*"` (q double-quotes stripped),
-ordered by `-set.releaseDate`. Returns
+400 if `q` empty. The query is parsed into a name and an optional collector
+number (so `pikachu 051/162` or `charizard 4` work): upstream query is
+`name:"*<name>*"` plus a `number:` clause (tolerant of leading zeros) when a
+number is present, ordered by `-set.releaseDate`. If the number matches nothing
+the service retries name-only so the vendor still sees candidates. Upstream
+calls are retried once on timeout/5xx (the Pokémon TCG API is flaky mid-Scrydex-
+migration). Returns
 `{ cards: [normalized + "suggested": { <variant>: round(market * pct/100, 2) }],
 page, totalCount, sell_percentage }` (pct from settings at request time).
+`searchCards` and `parseQuery` are exported from `server/services/prices.js`.
 
 ### `GET /api/prices/card/:tcgCardId`
 Single card, same normalized shape + `suggested` + `sell_percentage`.
@@ -245,9 +253,12 @@ Single card, same normalized shape + `suggested` + `sell_percentage`.
 ### `POST /api/prices/scan`
 Identify a card from a photo, then price it. Body: `{ image }` where `image` is
 a data URL (`data:image/jpeg;base64,…`) or raw base64 (with optional
-`media_type`). Backed by `server/services/scan.js`, which calls Claude's vision
-API (`@anthropic-ai/sdk`) using the `anthropic_api_key` and `scan_model`
-settings; the base URL is overridable via env `ANTHROPIC_BASE_URL` for tests.
+`media_type`). Backed by `server/services/scan.js`, which picks a vision
+provider by which key is set: **Google Gemini** (`gemini_api_key`, free tier —
+preferred) via the REST `generateContent` endpoint, otherwise **Anthropic
+Claude** (`anthropic_api_key`, paid). Base URLs are overridable via env
+`GEMINI_BASE_URL` / `ANTHROPIC_BASE_URL` for tests. The identified name+number
+feed the number-aware search above.
 The model returns `{ found, name, set_name, card_number }` (structured output);
 when `found` and a `name` are present, the route runs `searchCards(name)` and
 returns `{ identified, cards: [normalized + suggested], page, totalCount,

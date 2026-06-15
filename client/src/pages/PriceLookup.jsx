@@ -217,7 +217,7 @@ export default function PriceLookup() {
         <input
           type="search"
           className="search-input"
-          placeholder="Search a card… e.g. Charizard"
+          placeholder="Search a card… e.g. Charizard or “pikachu 051/162”"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           autoFocus
@@ -285,7 +285,7 @@ export default function PriceLookup() {
         <EmptyState
           icon="🔎"
           title="Search for any Pokémon card"
-          hint={'Type a card name and hit Search. You’ll get market prices and your asking price for every variant — then add copies straight to inventory.'}
+          hint={'Type a card name — or name plus its number like “pikachu 051/162” — and hit Search. You’ll get market prices and your asking price for every variant, then add copies straight to inventory.'}
         />
       )}
 

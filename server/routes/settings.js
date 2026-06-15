@@ -12,6 +12,8 @@ const KNOWN_KEYS = [
   'watch_poll_minutes',
   'anthropic_api_key',
   'scan_model',
+  'gemini_api_key',
+  'scan_model_gemini',
 ];
 
 // GET /api/settings

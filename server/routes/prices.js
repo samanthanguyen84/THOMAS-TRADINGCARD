@@ -77,7 +77,10 @@ router.post('/scan', async (req, res, next) => {
     if (!identified.found || !identified.name) {
       return res.json({ identified, cards: [], page: 1, totalCount: 0, sell_percentage: pct });
     }
-    const result = await searchCards({ q: identified.name, page: 1, pageSize: 20 });
+    // Search by the recognized name plus number (falls back to name-only if the
+    // number doesn't match), so a scan lands on the exact printing.
+    const q = [identified.name, identified.card_number].filter(Boolean).join(' ');
+    const result = await searchCards({ q, page: 1, pageSize: 20 });
     res.json({
       identified,
       cards: result.cards.map((card) => withSuggested(card, pct)),

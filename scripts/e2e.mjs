@@ -203,7 +203,10 @@ function tcgHandler(req, res) {
     const q = u.searchParams.get('q') || '';
     const m = q.match(/name:"\*?([^*"]*)\*?"/);
     const term = (m ? m[1] : q).toLowerCase();
-    const matches = TCG_FIXTURES.filter((c) => c.name.toLowerCase().includes(term)).sort((a, b) =>
+    const nums = [...q.matchAll(/number:([A-Za-z0-9]+)/g)].map((x) => x[1]);
+    let matches = TCG_FIXTURES.filter((c) => c.name.toLowerCase().includes(term));
+    if (nums.length) matches = matches.filter((c) => nums.includes(String(c.number)));
+    matches = matches.sort((a, b) =>
       (b.set.releaseDate || '').localeCompare(a.set.releaseDate || '')
     );
     const page = Number(u.searchParams.get('page')) || 1;
@@ -325,6 +328,26 @@ function anthropicHandler(req, res) {
 // 1x1 transparent PNG, as a data URL — stand-in for a card photo.
 const SAMPLE_IMAGE =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+// --- Google Gemini mock (generateContent shape) ----------------------------
+
+const geminiState = { mode: 'found', calls: 0 };
+
+function geminiHandler(req, res) {
+  if (req.method !== 'POST') return jsonOut(res, 404, { error: 'not found' });
+  let body = '';
+  req.on('data', (chunk) => (body += chunk));
+  req.on('end', () => {
+    geminiState.calls += 1;
+    if (geminiState.mode === 'fail') {
+      return jsonOut(res, 500, { error: { code: 500, message: 'mock gemini down' } });
+    }
+    const card = { found: true, name: 'Pikachu', set_name: 'Base', card_number: '58' };
+    jsonOut(res, 200, {
+      candidates: [{ content: { role: 'model', parts: [{ text: JSON.stringify(card) }] } }],
+    });
+  });
+}
 
 // --- Discord webhook mock ---------------------------------------------------
 
@@ -455,10 +478,12 @@ async function main() {
   const retail = await startMock(retailHandler);
   const discord = await startMock(discordHandler);
   const anthropic = await startMock(anthropicHandler);
+  const gemini = await startMock(geminiHandler);
   cleanups.push(() => tcg.server.close());
   cleanups.push(() => retail.server.close());
   cleanups.push(() => discord.server.close());
   cleanups.push(() => anthropic.server.close());
+  cleanups.push(() => gemini.server.close());
   const discordWebhookUrl = `${discord.url}/webhooks/1234567890/e2e-test-token`;
 
   mockEnv = {
@@ -467,6 +492,7 @@ async function main() {
     BESTBUY_BASE_URL: retail.url,
     BN_BASE_URL: retail.url,
     ANTHROPIC_BASE_URL: anthropic.url,
+    GEMINI_BASE_URL: gemini.url,
   };
 
   // Real server (watcher disabled; the loop gets its own dedicated sub-test)
@@ -557,6 +583,38 @@ async function main() {
     assert.ok(r.data.error, 'JSON error body on vision failure');
     anthropicState.mode = 'found';
     await api('PUT', '/api/settings', { anthropic_api_key: '' });
+  });
+
+  await test('POST /api/prices/scan uses the free Gemini provider when its key is set', async () => {
+    await api('PUT', '/api/settings', { gemini_api_key: 'AIza-test' });
+    geminiState.mode = 'found';
+    const before = geminiState.calls;
+    const r = await api('POST', '/api/prices/scan', { image: SAMPLE_IMAGE });
+    assert.equal(r.status, 200);
+    assert.equal(geminiState.calls, before + 1, 'Gemini called exactly once');
+    assert.equal(r.data.identified.name, 'Pikachu');
+    assert.ok(r.data.cards.length >= 1, 'Gemini-identified card was priced');
+    await api('PUT', '/api/settings', { gemini_api_key: '' });
+  });
+
+  // ------------------------------------------- number-aware search
+
+  await test('GET /api/prices/search matches name + collector number', async () => {
+    const r = await api('GET', `/api/prices/search?q=${encodeURIComponent('pikachu 58')}`);
+    assert.equal(r.status, 200);
+    assert.ok(r.data.cards.length >= 1, 'found the numbered card');
+    assert.ok(
+      r.data.cards.every((c) => c.card_number === '58'),
+      'every result has the requested number'
+    );
+    assert.ok(r.data.cards.some((c) => /pikachu/i.test(c.name)), 'and is the right card');
+  });
+
+  await test('GET /api/prices/search falls back to name-only when the number misses', async () => {
+    const r = await api('GET', `/api/prices/search?q=${encodeURIComponent('pikachu 9999')}`);
+    assert.equal(r.status, 200);
+    assert.ok(r.data.cards.length >= 1, 'still returns name matches instead of nothing');
+    assert.ok(r.data.cards.some((c) => /pikachu/i.test(c.name)));
   });
 
   // ------------------------------------------- transaction edit (assign show)
